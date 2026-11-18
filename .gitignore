@@ -1,0 +1,67 @@
+# 构建目录 / 依赖安装目录
+/build/
+/release/
+/vcpkg_installed/
+/out/
+/bin/
+/obj/
+
+# 打包归档
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+
+# 编译产物和二进制文件
+*.exe
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.idb
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+*.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+*.manifest
+
+# CMake / Ninja 生成文件（保留 CMakeLists.txt、CMakePresets.json、vcpkg.json）
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+install_manifest.txt
+CMakeUserPresets.json
+build.ninja
+.ninja_deps
+.ninja_log
+.rules.ninja
+
+# 测试数据 / 大体积资源（不属于代码或配置）
+/res/
+
+# 日志、缓存和临时文件
+*.log
+*.tmp
+*.bak
+*.old
+*_check*.png
+Thumbs.db
+desktop.ini
+
+# IDE / 编辑器用户数据（保留 .vscode/ 中的项目配置）
+.vs/
+.idea/
+*.user
+*.suo
+*.opendb
+*.VC.db
+.vscode/ipch/
+.vscode/.cache/

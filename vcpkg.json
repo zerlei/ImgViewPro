@@ -1,0 +1,10 @@
+{
+  "name": "imgviewpro",
+  "version-string": "1.0.0",
+  "dependencies": [
+    {
+      "name": "opencv",
+      "features": [ "jpeg", "png", "tiff", "webp" ]
+    }
+  ]
+}
