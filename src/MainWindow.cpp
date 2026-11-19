@@ -1,5 +1,8 @@
 #include "MainWindow.h"
+#include "ClickableLabel.h"
 #include "DebugLog.h"
+#include "DropListWidget.h"
+#include "DropMdiArea.h"
 #include "FileAssociations.h"
 #include "ImageViewer.h"
 
@@ -8,71 +11,58 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
-#include <QDragEnterEvent>
-#include <QDragMoveEvent>
-#include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QIcon>
 #include <QImageReader>
 #include <QLabel>
 #include <QLibraryInfo>
 #include <QListWidget>
 #include <QMdiSubWindow>
+#include <QRect>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QMimeData>
-#include <QMouseEvent>
 #include <QPixmap>
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
-#include <QUrl>
 #include <QVBoxLayout>
 #include <QtGlobal>
 
+#include <ranges>
+
 namespace {
     QString formatPixelLabel(const QString& text) {
-        if (text.trimmed().isEmpty())
+        if (text.trimmed().isEmpty()) {
             return MainWindow::tr("点击此处输入像素坐标…");
+        }
         return text;
     }
 
     QString imageFileFilter() {
         const QList<QByteArray> formats = QImageReader::supportedImageFormats();
         QStringList patterns;
-        for (const QByteArray& format : formats)
+        for (const QByteArray& format : formats) {
             patterns << QStringLiteral("*.%1").arg(QString::fromLatin1(format));
+        }
         patterns << QStringLiteral("*.csv");
         return MainWindow::tr("图片/CSV 文件 (%1);;所有文件 (*)")
             .arg(patterns.join(QLatin1Char(' ')));
     }
 
-    QStringList localFilesFromDrop(QDropEvent* event) {
-        QStringList files;
-        const QMimeData* mime = event->mimeData();
-        if (mime && mime->hasUrls()) {
-            const QList<QUrl> urls = mime->urls();
-            for (const QUrl& url : urls) {
-                if (url.isLocalFile())
-                    files << url.toLocalFile();
-            }
-        }
-        return files;
-    }
-
-    void logMdiState(DropMdiArea* area, const char* tag) {
-        if (!dbg::loggingEnabled())
+    void logMdiState(const DropMdiArea* area, const char* tag) {
+        if (!dbg::loggingEnabled()) {
             return;
-
+        }
         const QList<QMdiSubWindow*> subs = area->subWindowList();
         QStringList parts;
         parts << QStringLiteral("n=%1").arg(subs.size());
-        for (int i = 0; i < subs.size(); ++i) {
-            QMdiSubWindow* sub = subs.at(i);
-            ImageViewer* viewer = qobject_cast<ImageViewer*>(sub->widget());
+        for (const int i : std::views::iota(0, static_cast<int>(subs.size()))) {
+            const QMdiSubWindow* sub = subs.at(i);
+            const ImageViewer* viewer = qobject_cast<ImageViewer*>(sub->widget());
             const QRect g = sub->geometry();
             parts << QStringLiteral("#%1 '%2' vis=%3 g=%4,%5,%6x%7 vp=%8x%9 zoom=%10 fit=%11")
                          .arg(i)
@@ -91,80 +81,8 @@ namespace {
     }
 } // namespace
 
-DropMdiArea::DropMdiArea(QWidget* parent)
-    : QMdiArea(parent) {
-    setAcceptDrops(true);
-    viewport()->setAcceptDrops(true);
-}
-
-void DropMdiArea::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
-        event->acceptProposedAction();
-    else
-        QMdiArea::dragEnterEvent(event);
-}
-
-void DropMdiArea::dragMoveEvent(QDragMoveEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
-        event->acceptProposedAction();
-    else
-        QMdiArea::dragMoveEvent(event);
-}
-
-void DropMdiArea::dropEvent(QDropEvent* event) {
-    const QStringList files = localFilesFromDrop(event);
-    if (!files.isEmpty()) {
-        emit filesDropped(files);
-        event->acceptProposedAction();
-        return;
-    }
-    QMdiArea::dropEvent(event);
-}
-
-DropListWidget::DropListWidget(QWidget* parent)
-    : QListWidget(parent) {
-    setAcceptDrops(true);
-    viewport()->setAcceptDrops(true);
-    setDragDropMode(QAbstractItemView::DropOnly);
-}
-
-void DropListWidget::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
-        event->acceptProposedAction();
-    else
-        QListWidget::dragEnterEvent(event);
-}
-
-void DropListWidget::dragMoveEvent(QDragMoveEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
-        event->acceptProposedAction();
-    else
-        QListWidget::dragMoveEvent(event);
-}
-
-void DropListWidget::dropEvent(QDropEvent* event) {
-    const QStringList files = localFilesFromDrop(event);
-    if (!files.isEmpty()) {
-        emit filesDropped(files);
-        event->acceptProposedAction();
-        return;
-    }
-    QListWidget::dropEvent(event);
-}
-
-ClickableLabel::ClickableLabel(QWidget* parent)
-    : QLabel(parent) {
-    setCursor(Qt::PointingHandCursor);
-    setToolTip(QObject::tr("点击输入像素坐标，定位并放大到该像素"));
-}
-
-void ClickableLabel::mousePressEvent(QMouseEvent* event) {
-    if (event->button() == Qt::LeftButton)
-        emit clicked();
-    QLabel::mousePressEvent(event);
-}
-
 MainWindow::MainWindow() {
+    setWindowIcon(QIcon(QStringLiteral(":/app.ico")));
     setWindowTitle(tr("ImgViewPro - 图片查看器"));
     resize(1100, 750);
 
@@ -187,7 +105,7 @@ MainWindow::MainWindow() {
                          .arg(QCoreApplication::applicationPid()));
 
     if (dbg::loggingEnabled()) {
-        QTimer* heartbeat = new QTimer(this);
+        auto* const heartbeat = new QTimer(this);
         connect(heartbeat, &QTimer::timeout, this, [this]() {
             DBG_LOG("BEAT",
                     QStringLiteral("alive subs=%1").arg(m_mdi_area->subWindowList().size()));
@@ -202,8 +120,9 @@ MainWindow::~MainWindow() {
     DBG_LOG("EXIT", "MainWindow destructor enter");
     if (m_mdi_area) {
         const QList<QMdiSubWindow*> subs = m_mdi_area->subWindowList();
-        for (QMdiSubWindow* sub : subs)
+        for (QMdiSubWindow* const sub : subs) {
             delete sub;
+        }
     }
 }
 
@@ -219,29 +138,33 @@ void MainWindow::createActions() {
     m_zoom_in_act = new QAction(tr("放大"), this);
     m_zoom_in_act->setShortcut(QKeySequence::ZoomIn);
     connect(m_zoom_in_act, &QAction::triggered, this, [this]() {
-        if (ImageViewer* viewer = activeViewer())
+        if (ImageViewer* const viewer = activeViewer()) {
             viewer->zoomIn();
+        }
     });
 
     m_zoom_out_act = new QAction(tr("缩小"), this);
     m_zoom_out_act->setShortcut(QKeySequence::ZoomOut);
     connect(m_zoom_out_act, &QAction::triggered, this, [this]() {
-        if (ImageViewer* viewer = activeViewer())
+        if (ImageViewer* const viewer = activeViewer()) {
             viewer->zoomOut();
+        }
     });
 
     m_fit_act = new QAction(tr("适应窗口"), this);
     m_fit_act->setShortcut(tr("Ctrl+0"));
     connect(m_fit_act, &QAction::triggered, this, [this]() {
-        if (ImageViewer* viewer = activeViewer())
+        if (ImageViewer* const viewer = activeViewer()) {
             viewer->zoomToFit();
+        }
     });
 
     m_zoom100_act = new QAction(tr("1:1 原始大小"), this);
     m_zoom100_act->setShortcut(tr("Ctrl+1"));
     connect(m_zoom100_act, &QAction::triggered, this, [this]() {
-        if (ImageViewer* viewer = activeViewer())
+        if (ImageViewer* const viewer = activeViewer()) {
             viewer->zoom100();
+        }
     });
 
     m_show_rgb_act = new QAction(tr("显示 RGB 数值"), this);
@@ -249,8 +172,9 @@ void MainWindow::createActions() {
     m_show_rgb_act->setChecked(true);
     m_show_rgb_act->setShortcut(tr("Ctrl+R"));
     connect(m_show_rgb_act, &QAction::toggled, this, [this](bool enabled) {
-        for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it)
-            it.key()->setShowRgbValues(enabled);
+        for (ImageViewer* const viewer : m_states.keys()) {
+            viewer->setShowRgbValues(enabled);
+        }
     });
 
     m_sync_act = new QAction(tr("视图联动 (像素精确)"), this);
@@ -259,8 +183,9 @@ void MainWindow::createActions() {
     m_sync_act->setShortcut(tr("Ctrl+L"));
     connect(m_sync_act, &QAction::toggled, this, [this](bool enabled) {
         m_sync_enabled = enabled;
-        if (m_sync_label)
+        if (m_sync_label) {
             m_sync_label->setText(enabled ? tr("联动: 开") : tr("联动: 关"));
+        }
     });
 
     m_tile_act = new QAction(tr("平铺窗口"), this);
@@ -301,16 +226,17 @@ void MainWindow::createDockWidget() {
     m_dock->setWidget(m_image_list);
     addDockWidget(Qt::LeftDockWidgetArea, m_dock);
 
-    auto activate_item = [this](QListWidgetItem* item) {
-        if (QMdiSubWindow* sub = m_item_to_sub.value(item))
+    auto activate_item = [this](QListWidgetItem* const item) {
+        if (QMdiSubWindow* const sub = m_item_to_sub.value(item)) {
             m_mdi_area->setActiveSubWindow(sub);
+        }
     };
     connect(m_image_list, &QListWidget::itemClicked, this, activate_item);
     connect(m_image_list, &QListWidget::itemDoubleClicked, this, activate_item);
 }
 
 void MainWindow::createMenus() {
-    QMenu* file_menu = menuBar()->addMenu(tr("文件"));
+    auto* const file_menu = menuBar()->addMenu(tr("文件"));
     file_menu->addAction(m_open_act);
     file_menu->addSeparator();
     file_menu->addAction(m_close_act);
@@ -318,7 +244,7 @@ void MainWindow::createMenus() {
     file_menu->addSeparator();
     file_menu->addAction(m_exit_act);
 
-    QMenu* view_menu = menuBar()->addMenu(tr("视图"));
+    auto* const view_menu = menuBar()->addMenu(tr("视图"));
     view_menu->addAction(m_zoom_in_act);
     view_menu->addAction(m_zoom_out_act);
     view_menu->addSeparator();
@@ -331,23 +257,23 @@ void MainWindow::createMenus() {
     view_menu->addSeparator();
     view_menu->addAction(m_dock->toggleViewAction());
 
-    QMenu* window_menu = menuBar()->addMenu(tr("窗口"));
+    auto* const window_menu = menuBar()->addMenu(tr("窗口"));
     window_menu->addAction(m_tile_act);
     window_menu->addAction(m_cascade_act);
     window_menu->addSeparator();
     window_menu->addAction(m_close_act);
     window_menu->addAction(m_close_all_act);
 
-    QMenu* tools_menu = menuBar()->addMenu(tr("工具"));
+    auto* const tools_menu = menuBar()->addMenu(tr("工具"));
     tools_menu->addAction(m_set_default_act);
     tools_menu->addAction(m_remove_default_act);
 
-    QMenu* help_menu = menuBar()->addMenu(tr("帮助"));
+    auto* const help_menu = menuBar()->addMenu(tr("帮助"));
     help_menu->addAction(m_about_act);
 }
 
 void MainWindow::createToolBar() {
-    QToolBar* tool_bar = addToolBar(tr("工具栏"));
+    auto* const tool_bar = addToolBar(tr("工具栏"));
     tool_bar->setToolButtonStyle(Qt::ToolButtonTextOnly);
     tool_bar->addAction(m_open_act);
     tool_bar->addSeparator();
@@ -381,32 +307,37 @@ void MainWindow::createStatusBar() {
 }
 
 void MainWindow::openImages(const QStringList& files) {
-    for (const QString& file : files)
+    for (const QString& file : files) {
         addImageWindow(file);
-    if (!files.isEmpty())
+    }
+    if (!files.isEmpty()) {
         updateStatusBar();
+    }
 }
 
 void MainWindow::addImageWindow(const QString& file_path) {
     QString canonical = QFileInfo(file_path).canonicalFilePath();
-    if (canonical.isEmpty())
+    if (canonical.isEmpty()) {
         canonical = QFileInfo(file_path).absoluteFilePath();
+    }
 
-    for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it) {
-        if (it->file_path.compare(canonical, Qt::CaseInsensitive) == 0 && it->sub_window) {
-            m_mdi_area->setActiveSubWindow(it->sub_window);
+    for (ImageViewer* const existing : m_states.keys()) {
+        const auto state = m_states.value(existing);
+        if (state.file_path.compare(canonical, Qt::CaseInsensitive) == 0 && state.sub_window) {
+            m_mdi_area->setActiveSubWindow(state.sub_window);
             return;
         }
     }
 
-    ImageViewer* viewer = new ImageViewer(this);
+    auto* const viewer = new ImageViewer(this);
     viewer->setShowRgbValues(m_show_rgb_act->isChecked());
     if (!viewer->openImage(file_path)) {
         delete viewer;
         return;
     }
 
-    QMdiSubWindow* sub = m_mdi_area->addSubWindow(viewer);
+    auto* const sub = m_mdi_area->addSubWindow(viewer);
+    sub->setWindowIcon(windowIcon());
     sub->setAttribute(Qt::WA_DeleteOnClose);
     const QString name = QFileInfo(file_path).fileName();
     sub->setWindowTitle(name);
@@ -424,34 +355,37 @@ void MainWindow::addImageWindow(const QString& file_path) {
     const QPixmap thumb =
         QPixmap::fromImage(viewer->image())
             .scaled(QSize(120, 90), Qt::KeepAspectRatio, Qt::SmoothTransformation);
-    QListWidgetItem* item = new QListWidgetItem(thumb, name);
+    auto* const item = new QListWidgetItem(thumb, name);
     item->setToolTip(file_path);
     m_image_list->addItem(item);
     m_item_to_sub.insert(item, sub);
 
     connect(viewer, &ImageViewer::zoomChanged, this, [this, viewer](double zoom) {
-        auto it = m_states.find(viewer);
-        if (it == m_states.end())
+        if (!m_states.contains(viewer)) {
             return;
-        it->zoom = zoom;
-        if (activeViewer() == viewer)
+        }
+        m_states[viewer].zoom = zoom;
+        if (activeViewer() == viewer) {
             m_zoom_label->setText(tr("缩放: %1%").arg(zoom * 100.0, 0, 'f', 0));
+        }
     });
     connect(viewer, &ImageViewer::pixelModeChanged, this, [this, viewer](bool enabled) {
-        auto it = m_states.find(viewer);
-        if (it == m_states.end())
+        if (!m_states.contains(viewer)) {
             return;
-        it->pixel_mode = enabled;
-        if (activeViewer() == viewer)
+        }
+        m_states[viewer].pixel_mode = enabled;
+        if (activeViewer() == viewer) {
             updateStatusBar();
+        }
     });
     connect(viewer, &ImageViewer::pixelInfo, this, [this, viewer](const QString& text) {
-        auto it = m_states.find(viewer);
-        if (it == m_states.end())
+        if (!m_states.contains(viewer)) {
             return;
-        it->pixel_info = text;
-        if (activeViewer() == viewer)
+        }
+        m_states[viewer].pixel_info = text;
+        if (activeViewer() == viewer) {
             m_pixel_label->setText(formatPixelLabel(text));
+        }
     });
     connect(viewer, &ImageViewer::filesDropped, this, &MainWindow::openImages);
     connect(viewer, &ImageViewer::userZoomed, this, &MainWindow::onUserZoomed);
@@ -470,28 +404,29 @@ void MainWindow::addImageWindow(const QString& file_path) {
     m_mdi_area->setActiveSubWindow(sub);
 
     if (m_sync_enabled && m_states.size() > 1) {
-        ImageViewer* reference = nullptr;
-        for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it) {
-            if (it.key() != viewer) {
-                reference = it.key();
+        const ImageViewer* reference = nullptr;
+        for (const ImageViewer* const existing : m_states.keys()) {
+            if (existing != viewer) {
+                reference = existing;
                 break;
             }
         }
-        if (reference)
+        if (reference) {
             viewer->applyAbsoluteZoom(reference->currentZoom(), QPointF());
+        }
     }
 
     updateDockSelection();
 }
 
 ImageViewer* MainWindow::activeViewer() const {
-    QMdiSubWindow* sub = m_mdi_area->activeSubWindow();
+    const auto* const sub = m_mdi_area->activeSubWindow();
     return sub ? qobject_cast<ImageViewer*>(sub->widget()) : nullptr;
 }
 
 void MainWindow::updateStatusBar() {
     const QList<QMdiSubWindow*> subs = m_mdi_area->subWindowList();
-    ImageViewer* viewer = activeViewer();
+    auto* const viewer = activeViewer();
     if (!viewer || !m_states.contains(viewer)) {
         m_count_label->clear();
         m_image_label->clear();
@@ -518,10 +453,11 @@ void MainWindow::updateStatusBar() {
     updateDockSelection();
 }
 
-void MainWindow::updateDockSelection() {
-    QMdiSubWindow* active = m_mdi_area->activeSubWindow();
-    for (auto it = m_item_to_sub.constBegin(); it != m_item_to_sub.constEnd(); ++it)
-        it.key()->setSelected(it.value() == active);
+void MainWindow::updateDockSelection() const {
+    const auto* const active = m_mdi_area->activeSubWindow();
+    for (QListWidgetItem* const item : m_item_to_sub.keys()) {
+        item->setSelected(m_item_to_sub.value(item) == active);
+    }
 }
 
 void MainWindow::onOpen() {
@@ -542,7 +478,7 @@ void MainWindow::onAbout() {
            "滚轮缩放，鼠标左键拖动平移；“窗口 → 平铺窗口”可并排查看多张图片。"));
 }
 
-void MainWindow::onSubWindowActivated(QMdiSubWindow* sub) {
+void MainWindow::onSubWindowActivated(const QMdiSubWindow* sub) {
     DBG_LOG("ACTIVATE", sub ? sub->windowTitle() : QStringLiteral("<none>"));
     updateStatusBar();
 }
@@ -563,9 +499,10 @@ void MainWindow::onCascade() {
     DBG_LOG("CASCADE", "exit");
 }
 
-void MainWindow::onCloseCurrent() {
-    if (QMdiSubWindow* sub = m_mdi_area->activeSubWindow())
+void MainWindow::onCloseCurrent() const {
+    if (QMdiSubWindow* const sub = m_mdi_area->activeSubWindow()) {
         sub->close();
+    }
 }
 
 void MainWindow::onCloseAll() {
@@ -593,19 +530,20 @@ void MainWindow::onRemoveDefault() {
 }
 
 void MainWindow::onPixelLabelClicked() {
-    ImageViewer* viewer = activeViewer();
-    if (!viewer || !viewer->hasImage())
+    auto* const viewer = activeViewer();
+    if (!viewer || !viewer->hasImage()) {
         return;
+    }
 
     const QSize size = viewer->imageSize();
 
     QDialog dialog(this);
     dialog.setWindowTitle(tr("定位像素"));
 
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* form = new QFormLayout();
-    auto* x_spin = new QSpinBox(&dialog);
-    auto* y_spin = new QSpinBox(&dialog);
+    auto* const layout = new QVBoxLayout(&dialog);
+    auto* const form = new QFormLayout();
+    auto* const x_spin = new QSpinBox(&dialog);
+    auto* const y_spin = new QSpinBox(&dialog);
     x_spin->setRange(0, size.width() - 1);
     y_spin->setRange(0, size.height() - 1);
     x_spin->setToolTip(tr("X 范围: 0-%1").arg(size.width() - 1));
@@ -614,37 +552,41 @@ void MainWindow::onPixelLabelClicked() {
     form->addRow(tr("Y 坐标:"), y_spin);
     layout->addLayout(form);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    auto* const buttons =
+        new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     layout->addWidget(buttons);
 
-    if (dialog.exec() != QDialog::Accepted)
+    if (dialog.exec() != QDialog::Accepted) {
         return;
+    }
 
     viewer->focusOnPixel(x_spin->value(), y_spin->value());
 }
 
-void MainWindow::onUserZoomed(double zoom, const QPointF& centerDelta) {
-    if (!m_sync_enabled)
+void MainWindow::onUserZoomed(double zoom, const QPointF& centerDelta) const {
+    if (!m_sync_enabled) {
         return;
+    }
 
-    ImageViewer* source = qobject_cast<ImageViewer*>(sender());
-    for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it) {
-        ImageViewer* viewer = it.key();
-        if (viewer != source)
+    const auto* const source = qobject_cast<ImageViewer*>(sender());
+    for (ImageViewer* const viewer : m_states.keys()) {
+        if (viewer != source) {
             viewer->applyAbsoluteZoom(zoom, centerDelta);
+        }
     }
 }
 
-void MainWindow::onUserPanned(const QPointF& delta) {
-    if (!m_sync_enabled)
+void MainWindow::onUserPanned(const QPointF& delta) const {
+    if (!m_sync_enabled) {
         return;
+    }
 
-    ImageViewer* source = qobject_cast<ImageViewer*>(sender());
-    for (auto it = m_states.constBegin(); it != m_states.constEnd(); ++it) {
-        ImageViewer* viewer = it.key();
-        if (viewer != source)
+    const auto* const source = qobject_cast<ImageViewer*>(sender());
+    for (ImageViewer* const viewer : m_states.keys()) {
+        if (viewer != source) {
             viewer->applyPanBy(delta);
+        }
     }
 }

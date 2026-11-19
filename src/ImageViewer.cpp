@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <ranges>
 #include <vector>
 
 namespace {
@@ -35,16 +36,19 @@ namespace {
     constexpr double k_max_zoom = 128.0;
     constexpr double k_pixel_zoom_threshold = 8.0;
     constexpr double k_rgb_label_threshold = 24.0;
+    constexpr int k_value_digits = 10;
 
     void copyMatRowsToQImage(const cv::Mat& mat, QImage& image) {
-        for (int y = 0; y < mat.rows; ++y)
+        for (const int y : std::views::iota(0, mat.rows)) {
             std::memcpy(image.scanLine(y), mat.ptr<const uchar>(y),
                         static_cast<size_t>(mat.cols) * mat.elemSize());
+        }
     }
 
     QImage matToQImage(const cv::Mat& mat) {
-        if (mat.empty())
+        if (mat.empty()) {
             return {};
+        }
 
         if (mat.depth() == CV_8U && mat.channels() == 1) {
             QImage image(mat.cols, mat.rows, QImage::Format_Grayscale8);
@@ -112,21 +116,28 @@ namespace {
 
     QStringList valuesFromMat(const cv::Mat& mat, int x, int y) {
         QStringList values;
-        if (mat.empty() || x < 0 || y < 0 || x >= mat.cols || y >= mat.rows)
+        if (mat.empty() || x < 0 || y < 0 || x >= mat.cols || y >= mat.rows) {
             return values;
+        }
 
         const int channels = mat.channels();
         const int depth = mat.depth();
         const auto value_at = [&](int channel) -> QString {
-            if (depth == CV_8U)
+            if (depth == CV_8U) {
                 return QString::number(mat.ptr<uchar>(y)[x * channels + channel]);
-            if (depth == CV_16U)
+            }
+            if (depth == CV_16U) {
                 return QString::number(mat.ptr<ushort>(y)[x * channels + channel]);
-            if (depth == CV_32F)
+            }
+            if (depth == CV_32F) {
                 return QString::number(
-                    static_cast<double>(mat.ptr<float>(y)[x * channels + channel]), 'f', 2);
-            if (depth == CV_64F)
-                return QString::number(mat.ptr<double>(y)[x * channels + channel], 'f', 2);
+                    static_cast<double>(mat.ptr<float>(y)[x * channels + channel]), 'g',
+                    k_value_digits);
+            }
+            if (depth == CV_64F) {
+                return QString::number(mat.ptr<double>(y)[x * channels + channel], 'g',
+                                       k_value_digits);
+            }
             return QStringLiteral("?");
         };
 
@@ -137,8 +148,9 @@ namespace {
         } else if (channels == 4) {
             values << value_at(2) << value_at(1) << value_at(0) << value_at(3);
         } else {
-            for (int channel = 0; channel < channels; ++channel)
+            for (const int channel : std::views::iota(0, channels)) {
                 values << value_at(channel);
+            }
         }
         return values;
     }
@@ -183,10 +195,12 @@ ImageViewer::ImageViewer(QWidget* parent)
 
 void ImageViewer::updateScrollBarPolicy() {
     const Qt::ScrollBarPolicy policy = m_fit_mode ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded;
-    if (horizontalScrollBarPolicy() != policy)
+    if (horizontalScrollBarPolicy() != policy) {
         setHorizontalScrollBarPolicy(policy);
-    if (verticalScrollBarPolicy() != policy)
+    }
+    if (verticalScrollBarPolicy() != policy) {
         setVerticalScrollBarPolicy(policy);
+    }
 }
 
 bool ImageViewer::openImage(const QString& file_path) {
@@ -206,8 +220,9 @@ bool ImageViewer::openImage(const QString& file_path) {
             return false;
         }
     } else {
-        if (!prefer_opencv)
+        if (!prefer_opencv) {
             image = QImage(file_path);
+        }
     }
 
     if (image.isNull()) {
@@ -256,32 +271,37 @@ bool ImageViewer::openImage(const QString& file_path) {
 
 bool ImageViewer::loadCsvImage(const QString& file_path, QImage* out_image) {
     QFile file(file_path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return false;
+    }
 
     int columns = 0;
     int rows = 0;
     while (!file.atEnd()) {
         const QByteArray line = file.readLine().trimmed();
-        if (line.isEmpty())
+        if (line.isEmpty()) {
             continue;
-        const int count = static_cast<int>(std::count(line.begin(), line.end(), ',')) + 1;
+        }
+        const int count = static_cast<int>(std::ranges::count(line, ',')) + 1;
         columns = std::max(columns, count);
         ++rows;
     }
-    if (rows <= 0 || columns <= 0)
+    if (rows <= 0 || columns <= 0) {
         return false;
+    }
 
-    cv::Mat values(rows, columns, CV_32FC1, cv::Scalar::all(0.0f));
+    cv::Mat values(rows, columns, CV_32FC1, cv::Scalar::all(0.0));
     file.seek(0);
     int row = 0;
     while (!file.atEnd() && row < rows) {
         const QByteArray line = file.readLine().trimmed();
-        if (line.isEmpty())
+        if (line.isEmpty()) {
             continue;
+        }
 
         const QList<QByteArray> tokens = line.split(',');
-        for (int col = 0; col < tokens.size() && col < columns; ++col) {
+        const int column_count = std::min(columns, static_cast<int>(tokens.size()));
+        for (const int col : std::views::iota(0, column_count)) {
             bool ok = false;
             const float value = tokens.at(col).trimmed().toFloat(&ok);
             values.at<float>(row, col) = ok ? value : 0.0f;
@@ -293,7 +313,7 @@ bool ImageViewer::loadCsvImage(const QString& file_path, QImage* out_image) {
     double max_value = 0.0;
     cv::minMaxLoc(values, &min_value, &max_value);
     const double scale = max_value > min_value ? 255.0 / (max_value - min_value) : 1.0;
-    const double shift = -static_cast<double>(min_value) * scale;
+    const double shift = -min_value * scale;
 
     cv::Mat normalized;
     values.convertTo(normalized, CV_8U, scale, shift);
@@ -321,12 +341,14 @@ void ImageViewer::zoomOut() {
 }
 
 void ImageViewer::scaleBy(double factor, QGraphicsView::ViewportAnchor anchor) {
-    if (!hasImage())
+    if (!hasImage()) {
         return;
+    }
 
     const double new_zoom = m_zoom * factor;
-    if (new_zoom < k_min_zoom || new_zoom > k_max_zoom)
+    if (new_zoom < k_min_zoom || new_zoom > k_max_zoom) {
         return;
+    }
 
     const QPointF before = sceneCenter();
     setTransformationAnchor(anchor);
@@ -340,8 +362,9 @@ void ImageViewer::scaleBy(double factor, QGraphicsView::ViewportAnchor anchor) {
 }
 
 void ImageViewer::zoomToFit() {
-    if (!hasImage())
+    if (!hasImage()) {
         return;
+    }
 
     m_fit_mode = true;
     updateScrollBarPolicy();
@@ -352,8 +375,9 @@ void ImageViewer::zoomToFit() {
 }
 
 void ImageViewer::zoom100() {
-    if (!hasImage())
+    if (!hasImage()) {
         return;
+    }
 
     resetTransform();
     centerOn(m_item);
@@ -365,8 +389,9 @@ void ImageViewer::zoom100() {
 }
 
 void ImageViewer::updateSmoothMode() {
-    if (!m_item)
+    if (!m_item) {
         return;
+    }
 
     const bool show_pixels = (m_zoom >= k_pixel_zoom_threshold);
     if (show_pixels != m_pixel_mode) {
@@ -416,8 +441,9 @@ void ImageViewer::mouseMoveEvent(QMouseEvent* event) {
 
 void ImageViewer::mouseReleaseEvent(QMouseEvent* event) {
     QGraphicsView::mouseReleaseEvent(event);
-    if (event->button() == Qt::LeftButton)
+    if (event->button() == Qt::LeftButton) {
         m_panning = false;
+    }
 }
 
 void ImageViewer::updatePixelInfo(const QPointF& scenePos) {
@@ -426,8 +452,8 @@ void ImageViewer::updatePixelInfo(const QPointF& scenePos) {
         return;
     }
 
-    const int x = static_cast<int>(std::floor(scenePos.x()));
-    const int y = static_cast<int>(std::floor(scenePos.y()));
+    const auto x = static_cast<int>(std::floor(scenePos.x()));
+    const auto y = static_cast<int>(std::floor(scenePos.y()));
     if (x < 0 || y < 0 || x >= m_image.width() || y >= m_image.height()) {
         emit pixelInfo(QString());
         return;
@@ -440,55 +466,61 @@ void ImageViewer::updatePixelInfo(const QPointF& scenePos) {
     }
 
     QString text = tr("像素: %1, %2 | ").arg(x).arg(y);
-    if (values.size() == 1)
+    if (values.size() == 1) {
         text += tr("灰度: %1").arg(values.first());
-    else if (values.size() == 3)
+    } else if (values.size() == 3) {
         text += tr("RGB: %1, %2, %3").arg(values.at(0), values.at(1), values.at(2));
-    else if (values.size() == 4)
+    } else if (values.size() == 4) {
         text +=
             tr("RGBA: %1, %2, %3, %4").arg(values.at(0), values.at(1), values.at(2), values.at(3));
-    else
+    } else {
         text += tr("通道: %1").arg(values.join(QStringLiteral(", ")));
+    }
     emit pixelInfo(text);
 }
 
 QStringList ImageViewer::pixelValueText(int x, int y) const {
-    if (!hasImage())
+    if (!hasImage()) {
         return {};
+    }
 
-    if (m_source_pixels && !m_source_pixels->mat.empty())
+    if (m_source_pixels && !m_source_pixels->mat.empty()) {
         return valuesFromMat(m_source_pixels->mat, x, y);
+    }
 
     const QColor color = m_image.pixelColor(x, y);
     if (m_image.format() == QImage::Format_Grayscale8 ||
-        m_image.format() == QImage::Format_Grayscale16)
+        m_image.format() == QImage::Format_Grayscale16) {
         return {QString::number(color.red())};
+    }
     return {QString::number(color.red()), QString::number(color.green()),
             QString::number(color.blue()), QString::number(color.alpha())};
 }
 
 void ImageViewer::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
+    if (event->mimeData() && event->mimeData()->hasUrls()) {
         event->acceptProposedAction();
-    else
+    } else {
         QGraphicsView::dragEnterEvent(event);
+    }
 }
 
 void ImageViewer::dragMoveEvent(QDragMoveEvent* event) {
-    if (event->mimeData() && event->mimeData()->hasUrls())
+    if (event->mimeData() && event->mimeData()->hasUrls()) {
         event->acceptProposedAction();
-    else
+    } else {
         QGraphicsView::dragMoveEvent(event);
+    }
 }
 
 void ImageViewer::dropEvent(QDropEvent* event) {
-    const QMimeData* mime = event->mimeData();
-    if (mime && mime->hasUrls()) {
+    if (const QMimeData* mime = event->mimeData(); mime && mime->hasUrls()) {
         QStringList files;
         const QList<QUrl> urls = mime->urls();
-        for (const QUrl& url : urls) {
-            if (url.isLocalFile())
-                files << url.toLocalFile();
+        for (const QUrl& url : urls | std::views::filter([](const QUrl& value) {
+                 return value.isLocalFile();
+             })) {
+            files << url.toLocalFile();
         }
         if (!files.isEmpty()) {
             emit filesDropped(files);
@@ -521,8 +553,9 @@ void ImageViewer::resizeEvent(QResizeEvent* event) {
 }
 
 void ImageViewer::setShowRgbValues(bool enabled) {
-    if (m_show_rgb_values == enabled)
+    if (m_show_rgb_values == enabled) {
         return;
+    }
     m_show_rgb_values = enabled;
     viewport()->update();
 }
@@ -532,11 +565,11 @@ QPointF ImageViewer::sceneCenter() const {
 }
 
 void ImageViewer::applyAbsoluteZoom(double zoom, const QPointF& centerDelta) {
-    if (!hasImage() || zoom <= 0.0)
+    if (!hasImage() || zoom <= 0.0) {
         return;
-
-    const double target = qBound(k_min_zoom, zoom, k_max_zoom);
-    if (!qFuzzyCompare(target, m_zoom)) {
+    }
+    if (const double target = qBound(k_min_zoom, zoom, k_max_zoom);
+        !qFuzzyCompare(target, m_zoom)) {
         const double factor = target / m_zoom;
         setTransformationAnchor(QGraphicsView::AnchorViewCenter);
         scale(factor, factor);
@@ -546,19 +579,23 @@ void ImageViewer::applyAbsoluteZoom(double zoom, const QPointF& centerDelta) {
         updateSmoothMode();
         emit zoomChanged(m_zoom);
     }
-    if (qAbs(centerDelta.x()) > 0.001 || qAbs(centerDelta.y()) > 0.001)
+    if (qAbs(centerDelta.x()) > 0.001 || qAbs(centerDelta.y()) > 0.001) {
         applyPanBy(centerDelta);
+    }
 }
 
 void ImageViewer::applyPanBy(const QPointF& delta) {
-    if (!hasImage())
+    if (!hasImage()) {
         return;
+    }
+
     centerOn(sceneCenter() + delta);
 }
 
 void ImageViewer::focusOnPixel(int x, int y) {
-    if (!hasImage() || x < 0 || y < 0 || x >= m_image.width() || y >= m_image.height())
+    if (!hasImage() || x < 0 || y < 0 || x >= m_image.width() || y >= m_image.height()) {
         return;
+    }
 
     if (!qFuzzyCompare(m_zoom, k_max_zoom)) {
         const double factor = k_max_zoom / m_zoom;
@@ -577,8 +614,9 @@ void ImageViewer::focusOnPixel(int x, int y) {
 
 void ImageViewer::drawForeground(QPainter* painter, const QRectF& rect) {
     QGraphicsView::drawForeground(painter, rect);
-    if (!m_show_rgb_values || !hasImage() || m_zoom < k_rgb_label_threshold)
+    if (!m_show_rgb_values || !hasImage() || m_zoom < k_rgb_label_threshold) {
         return;
+    }
 
     const QRectF visible = mapToScene(viewport()->rect()).boundingRect();
     const int x0 = qMax(0, static_cast<int>(std::floor(visible.left())));
@@ -606,12 +644,12 @@ void ImageViewer::drawForeground(QPainter* painter, const QRectF& rect) {
     painter->resetTransform();
 
     QFont font = painter->font();
-    font.setPixelSize(qBound(7, static_cast<int>(m_zoom / 4.0), 13));
+    font.setPixelSize(qBound(6, static_cast<int>(m_zoom / 6.0), 10));
     font.setBold(true);
     painter->setFont(font);
 
-    for (int y = y0; y <= y1; ++y) {
-        for (int x = x0; x <= x1; ++x) {
+    for (const int y : std::views::iota(y0, y1 + 1)) {
+        for (const int x : std::views::iota(x0, x1 + 1)) {
             const QRectF cell = mapFromScene(QRectF(x, y, 1, 1)).boundingRect();
             const QColor color = m_image.pixelColor(x, y);
             const int luminance =
@@ -623,6 +661,7 @@ void ImageViewer::drawForeground(QPainter* painter, const QRectF& rect) {
 
     painter->restore();
 
-    if (log_this)
+    if (log_this) {
         DBG_LOG("FG", QStringLiteral("exit range=%1..%2 %3..%4").arg(x0).arg(x1).arg(y0).arg(y1));
+    }
 }

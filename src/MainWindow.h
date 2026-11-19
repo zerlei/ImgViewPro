@@ -1,77 +1,21 @@
 #pragma once
 
+#include "ViewerState.h"
+
 #include <QHash>
-#include <QLabel>
-#include <QListWidget>
 #include <QMainWindow>
-#include <QMdiArea>
 #include <QPointF>
-#include <QSize>
-#include <QString>
 #include <QStringList>
 
+class ClickableLabel;
+class DropListWidget;
+class DropMdiArea;
 class ImageViewer;
 class QAction;
 class QDockWidget;
-class QDragEnterEvent;
-class QDragMoveEvent;
-class QDropEvent;
+class QLabel;
 class QListWidgetItem;
 class QMdiSubWindow;
-class QMouseEvent;
-
-class DropMdiArea : public QMdiArea {
-    Q_OBJECT
-
-      public:
-        explicit DropMdiArea(QWidget* parent = nullptr);
-
-      signals:
-        void filesDropped(const QStringList& files);
-
-      protected:
-        void dragEnterEvent(QDragEnterEvent * event) override;
-        void dragMoveEvent(QDragMoveEvent * event) override;
-        void dropEvent(QDropEvent * event) override;
-};
-
-class DropListWidget : public QListWidget {
-    Q_OBJECT
-
-      public:
-        explicit DropListWidget(QWidget* parent = nullptr);
-
-      signals:
-        void filesDropped(const QStringList& files);
-
-      protected:
-        void dragEnterEvent(QDragEnterEvent * event) override;
-        void dragMoveEvent(QDragMoveEvent * event) override;
-        void dropEvent(QDropEvent * event) override;
-};
-
-class ClickableLabel : public QLabel {
-    Q_OBJECT
-
-      public:
-        explicit ClickableLabel(QWidget* parent = nullptr);
-
-      signals:
-        void clicked();
-
-      protected:
-        void mousePressEvent(QMouseEvent * event) override;
-};
-
-struct ViewerState {
-    QMdiSubWindow* sub_window = nullptr;
-    QString file_path;
-    QString file_name;
-    QSize image_size;
-    double zoom = 1.0;
-    QString pixel_info;
-    bool pixel_mode = false;
-};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -86,13 +30,13 @@ class MainWindow : public QMainWindow {
       private slots:
         void onOpen();
         void onAbout();
-        void onSubWindowActivated(QMdiSubWindow * sub);
+        void onSubWindowActivated(const QMdiSubWindow* sub);
         void onTile();
         void onCascade();
-        void onCloseCurrent();
+        void onCloseCurrent() const;
         void onCloseAll();
-        void onUserZoomed(double zoom, const QPointF& centerDelta);
-        void onUserPanned(const QPointF& delta);
+        void onUserZoomed(double zoom, const QPointF& centerDelta) const;
+        void onUserPanned(const QPointF& delta) const;
         void onSetDefault();
         void onRemoveDefault();
         void onPixelLabelClicked();
@@ -101,7 +45,7 @@ class MainWindow : public QMainWindow {
         ImageViewer* activeViewer() const;
         void addImageWindow(const QString& file_path);
         void updateStatusBar();
-        void updateDockSelection();
+        void updateDockSelection() const;
         void createActions();
         void createDockWidget();
         void createMenus();

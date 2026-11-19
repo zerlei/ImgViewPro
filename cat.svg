@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB74D"/>
+      <stop offset="1" stop-color="#FF8A65"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 尾巴 -->
+  <path d="M104 96 C130 96 132 58 112 58 C104 58 100 66 104 72 C110 70 118 74 118 84 C118 92 112 94 104 94 Z" fill="url(#body)"/>
+
+  <!-- 身体 -->
+  <ellipse cx="64" cy="94" rx="34" ry="28" fill="url(#body)"/>
+
+  <!-- 耳朵 -->
+  <path d="M34 46 L30 14 L60 34 Z" fill="#FF8A65"/>
+  <path d="M94 46 L98 14 L68 34 Z" fill="#FF8A65"/>
+  <path d="M38 42 L36 24 L52 36 Z" fill="#FFCDD2"/>
+  <path d="M90 42 L92 24 L76 36 Z" fill="#FFCDD2"/>
+
+  <!-- 头部 -->
+  <circle cx="64" cy="56" r="36" fill="url(#body)"/>
+
+  <!-- 眼睛 -->
+  <circle cx="51" cy="52" r="5" fill="#3E2723"/>
+  <circle cx="77" cy="52" r="5" fill="#3E2723"/>
+  <circle cx="52.5" cy="50.5" r="1.6" fill="#FFFFFF"/>
+  <circle cx="78.5" cy="50.5" r="1.6" fill="#FFFFFF"/>
+
+  <!-- 鼻子 -->
+  <path d="M58 64 L70 64 L64 70 Z" fill="#E57373"/>
+
+  <!-- 嘴 -->
+  <path d="M64 70 Q59 77 53 72 M64 70 Q69 77 75 72" fill="none" stroke="#3E2723" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- 胡须 -->
+  <g stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity="0.9">
+    <line x1="30" y1="62" x2="46" y2="65"/>
+    <line x1="28" y1="70" x2="46" y2="70"/>
+    <line x1="30" y1="78" x2="46" y2="75"/>
+    <line x1="98" y1="62" x2="82" y2="65"/>
+    <line x1="100" y1="70" x2="82" y2="70"/>
+    <line x1="98" y1="78" x2="82" y2="75"/>
+  </g>
+
+  <!-- 前爪 -->
+  <ellipse cx="52" cy="116" rx="10" ry="6" fill="#FFA726"/>
+  <ellipse cx="76" cy="116" rx="10" ry="6" fill="#FFA726"/>
+</svg>

@@ -4,24 +4,27 @@
 #include <QDataStream>
 #include <QDir>
 #include <QFileInfo>
+#include <QIcon>
 #include <QLocalServer>
 #include <QLocalSocket>
 
+#include <ranges>
 #include <string>
 
 namespace {
     const QString k_server_name = QStringLiteral("ImgViewPro.single-instance");
 
-    QStringList imageFilesFromArgs(const QApplication& app) {
+    QStringList imageFilesFromArgs() {
         QStringList files;
-        const QStringList args = app.arguments();
-        for (int i = 1; i < args.size(); ++i) {
-            const QString& arg = args.at(i);
-            if (arg.isEmpty() || arg.startsWith(QLatin1Char('-')))
+        const QStringList args = QApplication::arguments();
+        for (const QString& arg : args | std::views::drop(1)) {
+            if (arg.isEmpty() || arg.startsWith(QLatin1Char('-'))) {
                 continue;
+            }
             const QFileInfo info(arg);
-            if (info.isFile())
+            if (info.isFile()) {
                 files << info.absoluteFilePath();
+            }
         }
         return files;
     }
@@ -29,10 +32,11 @@ namespace {
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
-    app.setApplicationName(QStringLiteral("ImgViewPro"));
-    app.setOrganizationName(QStringLiteral("ImgViewPro"));
+    QApplication::setApplicationName(QStringLiteral("ImgViewPro"));
+    QApplication::setOrganizationName(QStringLiteral("ImgViewPro"));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/app.ico")));
 
-    const QStringList files = imageFilesFromArgs(app);
+    const QStringList files = imageFilesFromArgs();
 
     const QString server_name =
         k_server_name + QLatin1Char('.') +
@@ -55,12 +59,13 @@ int main(int argc, char* argv[]) {
     server.listen(server_name);
     MainWindow window;
     window.show();
-    if (!files.isEmpty())
+    if (!files.isEmpty()) {
         window.openImages(files);
+    }
 
     QObject::connect(&server, &QLocalServer::newConnection, [&server, &window]() {
         while (server.hasPendingConnections()) {
-            QLocalSocket* client = server.nextPendingConnection();
+            auto* const client = server.nextPendingConnection();
             QObject::connect(client, &QLocalSocket::readyRead, client, [client, &window]() {
                 QDataStream in(client);
                 QStringList incoming;
@@ -71,5 +76,5 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    return app.exec();
+    return QApplication::exec();
 }

@@ -30,7 +30,7 @@ QStringList FileAssociations::imageExtensions() {
 void FileAssociations::refreshShell() {
 #ifdef Q_OS_WIN
     using SHChangeNotifyFn = void(__stdcall*)(int, unsigned int, const void*, const void*);
-    auto fn = reinterpret_cast<SHChangeNotifyFn>(
+    const auto fn = reinterpret_cast<SHChangeNotifyFn>(
         QLibrary::resolve(QStringLiteral("shell32.dll"), "SHChangeNotify"));
     if (fn) {
         const int shcne_assocchanged = 0x08000000;
@@ -44,8 +44,9 @@ bool FileAssociations::setAsDefault(QString* error) {
 #ifdef Q_OS_WIN
     const QString exe_path = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
     if (exe_path.isEmpty()) {
-        if (error)
+        if (error) {
             *error = QStringLiteral("无法获取程序路径");
+        }
         return false;
     }
 
@@ -65,16 +66,18 @@ bool FileAssociations::setAsDefault(QString* error) {
 
     settings.sync();
     if (settings.status() != QSettings::NoError) {
-        if (error)
+        if (error) {
             *error = QStringLiteral("写入注册表失败，请检查权限");
+        }
         return false;
     }
 
     refreshShell();
     return true;
 #else
-    if (error)
+    if (error) {
         *error = QStringLiteral("仅支持 Windows");
+    }
     return false;
 #endif
 }
@@ -85,8 +88,9 @@ bool FileAssociations::removeAssociation(QString* error) {
 
     for (const QString& ext : imageExtensions()) {
         const QString ext_key = QStringLiteral(".%1").arg(ext);
-        if (settings.value(ext_key + QStringLiteral("/.")).toString() == k_prog_id)
+        if (settings.value(ext_key + QStringLiteral("/.")).toString() == k_prog_id) {
             settings.remove(ext_key + QStringLiteral("/."));
+        }
         settings.remove(ext_key + QStringLiteral("/OpenWithProgids/") + k_prog_id);
     }
     settings.remove(k_prog_id);
@@ -95,8 +99,9 @@ bool FileAssociations::removeAssociation(QString* error) {
     refreshShell();
     return true;
 #else
-    if (error)
+    if (error) {
         *error = QStringLiteral("仅支持 Windows");
+    }
     return false;
 #endif
 }
